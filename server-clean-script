@@ -1,0 +1,70 @@
+#!/bin/bash
+
+root_check() {
+    if [ $(id -u) != 0  ]; then
+        echo 'Must be runned as root!'
+        exit 1
+    fi
+}
+
+cache_clean() {
+    yum clean all -y >/dev/null
+}
+
+log_clean() {
+    logdirs='/usr/local/cpanel/logs /var/cpanel/logs /var/cpanel/updatelogs /var/cpanel/squirrelmail /var/cpanel/roundcube/log /usr/local/apache/domlogs/ftpxferlog /etc/apache2/logs/domlogs/ftpxferlog /usr/local/apache/domlogs /etc/apache2/logs/domlogs /usr/local/apache/logs/access_log /var/log'
+    for dir in $logdirs; do
+        if [ -d $dir ]; then
+            find $dir -mtime +90 -type f -exec rm {} \;
+        fi
+    done
+}
+
+tmp_clean() {
+    tmp_dir="/tmp /var/tmp"
+    for tmp in $tmp_dir; do
+        if [ -d $tmp ]; then
+            find $tmp -mtime +7 -and -not -exec fuser -s {} ';' -and -exec rm {} ';'
+        fi
+    done
+}
+
+mailqueue_clean() {
+    queue_dir="db input msglog"
+    for q in $queue_dir; do
+        if [ -d /var/spool/exim/$q ]; then
+           rm -rf /var/spool/exim/$q/* && /scripts/exim_tidydb && service exim restart
+        fi
+    done
+}
+
+cpaneluser_clean() {
+    users_log=$(for i in $(/bin/ls -A /var/cpanel/users); do  locate error_log | grep /home/$i ;done)
+    for log in $users_log; do
+        /usr/bin/truncate -s 0 $log
+    done
+}
+
+memory_clean() {
+    sync && echo 1 > /proc/sys/vm/drop_caches
+}
+
+cpmove_clean() {
+    cpmove=$(find /usr/local/apache/htdocs/ | egrep "*\/cpmove*" && find /home -maxdepth 1 | egrep "\/home\/cpmove*")
+    for c in $cpmove; do
+        rm -rf $c
+    done
+}
+
+main() {
+    root_check
+    cache_clean
+    log_clean
+    tmp_clean
+    mailqueue_clean
+    cpaneluser_clean
+    cpmove_clean
+    memory_clean
+}
+
+main
